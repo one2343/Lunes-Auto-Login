@@ -2,11 +2,13 @@ name: lunes Auto Login
 
 on:
   schedule:
-    - cron: "03 18 * * *"   # 每天 UTC 01:03（北京时间 09:03）
+    # 这里的 */13 代表每个月的 1号、14号、27号 运行。
+    - cron: "03 18 */13 * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write   # 必须增加这个权限，才能允许脚本删除旧的运行记录
 
 jobs:
   renew:
@@ -66,3 +68,19 @@ jobs:
             git commit -m "⏱️ 更新时间文件: $(date +'%Y-%m-%d %H:%M:%S')"
             git push origin HEAD:main
           fi
+
+      # 🧹 自动清理旧记录与上传的图片，仅保留最近 3 次
+      - name: 🧹 Clean up old runs and artifacts
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "开始清理旧的运行记录..."
+          # 获取当前 Workflow 的所有运行 ID，跳过前 3 个（即保留最近 3 次），并将其余的删除
+          gh run list --workflow "${{ github.workflow }}" --limit 100 --json databaseId -q '.[3:][].databaseId' | while read -r run_id; do
+            if [ -n "$run_id" ]; then
+              echo "正在删除旧记录 ID: $run_id"
+              gh run delete "$run_id"
+            fi
+          done
+          echo "清理完成！"
